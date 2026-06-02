@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Room — Portfolio</title>
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --paper: #f4f1ea;
+    --accent: #d9603b;
+    --accent-2: #4a7c8a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0d0d0f;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  canvas { display: block; }
+
+  /* ---- Crosshair ---- */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%;
+    width: 22px; height: 22px;
+    transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 10;
+    opacity: 0; transition: opacity .25s;
+  }
+  #crosshair.active { opacity: .85; }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: #fff;
+    box-shadow: 0 0 3px rgba(0,0,0,.8);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #crosshair.hot::before, #crosshair.hot::after { background: var(--accent); }
+
+  /* ---- Start / pause overlay ---- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 30;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 40%, #2a2a30, #0d0d0f 80%);
+    color: var(--paper); text-align: center;
+    transition: opacity .4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay h1 {
+    font-size: clamp(2rem, 6vw, 3.6rem);
+    letter-spacing: .12em; font-weight: 700;
+    text-transform: uppercase; margin-bottom: .4rem;
+  }
+  #overlay h1 span { color: var(--accent); }
+  #overlay p.sub { opacity: .65; margin-bottom: 2.4rem; letter-spacing: .08em; }
+  #startBtn {
+    font-family: inherit; font-size: 1rem; letter-spacing: .14em;
+    text-transform: uppercase; color: #0d0d0f; background: var(--accent);
+    border: none; padding: 1rem 2.4rem; cursor: pointer;
+    transition: transform .15s, background .15s;
+  }
+  #startBtn:hover { transform: translateY(-3px); background: #ec7350; }
+  .controls {
+    margin-top: 2.6rem; display: flex; gap: 1.6rem;
+    flex-wrap: wrap; justify-content: center; opacity: .55;
+    font-size: .82rem; letter-spacing: .06em;
+  }
+  .key {
+    border: 1px solid #555; padding: .35rem .6rem;
+    border-radius: 3px; display: inline-block; margin: 0 .15rem;
+    min-width: 1.6rem;
+  }
+
+  /* ---- Hint label ---- */
+  #hint {
+    position: fixed; bottom: 38px; left: 50%;
+    transform: translateX(-50%); z-index: 12;
+    color: var(--paper); background: rgba(20,20,24,.82);
+    padding: .55rem 1.1rem; letter-spacing: .08em; font-size: .85rem;
+    border-left: 3px solid var(--accent);
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  #hint.show { opacity: 1; }
+
+  /* ---- Info panel ---- */
+  #panel {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(8,8,10,.72); backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  #panel.open { opacity: 1; pointer-events: auto; }
+  .card {
+    background: var(--paper); color: var(--ink);
+    width: min(620px, 90vw); max-height: 82vh; overflow-y: auto;
+    padding: 2.4rem 2.6rem; position: relative;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+    transform: translateY(20px) scale(.97);
+    transition: transform .3s;
+  }
+  #panel.open .card { transform: translateY(0) scale(1); }
+  .card .tag {
+    font-size: .72rem; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: .5rem;
+  }
+  .card h2 {
+    font-size: 1.9rem; margin-bottom: 1rem; line-height: 1.15;
+    border-bottom: 2px solid var(--ink); padding-bottom: .7rem;
+  }
+  .card p { line-height: 1.7; margin-bottom: 1rem; font-size: .98rem; }
+  .card ul { margin: 0 0 1rem 1.2rem; line-height: 1.7; }
+  .card .imgrow { display: flex; gap: .8rem; flex-wrap: wrap; margin: 1rem 0; }
+  .card .imgrow div {
+    flex: 1; min-width: 120px; height: 110px;
+    background: var(--accent-2); display: flex;
+    align-items: center; justify-content: center;
+    color: #fff; font-size: .75rem; letter-spacing: .1em;
+    text-align: center; opacity: .85;
+  }
+  .card .imgrow div:nth-child(2) { background: var(--accent); }
+  .card .imgrow div:nth-child(3) { background: #6b8f71; }
+  .closeBtn {
+    position: absolute; top: 1rem; right: 1.1rem;
+    background: var(--ink); color: var(--paper);
+    border: none; width: 34px; height: 34px; cursor: pointer;
+    font-size: 1.1rem; font-family: inherit;
+  }
+  .closeBtn:hover { background: var(--accent); }
+  .card .foot {
+    margin-top: 1.4rem; font-size: .78rem; opacity: .5;
+    letter-spacing: .08em;
+  }
+
+  /* ---- Top-left interaction log ---- */
+  #hud {
+    position: fixed; top: 16px; left: 18px; z-index: 12;
+    color: var(--paper); font-size: .78rem; letter-spacing: .07em;
+    opacity: .5; line-height: 1.6;
+  }
+  #hud b { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="crosshair"></div>
+<div id="hint"></div>
+
+<div id="hud">
+  <div>WASD / Arrows — move &nbsp;·&nbsp; Mouse — look</div>
+  <div><b id="hudCount">0</b> / <b id="hudTotal">0</b> objects discovered &nbsp;·&nbsp; ESC — release cursor</div>
+</div>
+
+<div id="overlay">
+  <h1>My <span>Room</span></h1>
+  <p class="sub">A portfolio you can walk through.</p>
+  <button id="startBtn">Enter the room</button>
+  <div class="controls">
+    <span><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> move</span>
+    <span><span class="key">Mouse</span> look around</span>
+    <span><span class="key">E</span> / <span class="key">Click</span> interact</span>
+    <span><span class="key">Shift</span> sprint</span>
+    <span><span class="key">Esc</span> release cursor</span>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="card">
+    <button class="closeBtn" id="closeBtn">✕</button>
+    <div class="tag" id="cardTag"></div>
+    <h2 id="cardTitle"></h2>
+    <div id="cardBody"></div>
+    <div class="foot">Press E or ESC to close · keep exploring the room</div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   PORTFOLIO CONTENT  — edit these objects to put your real info
+   ============================================================ */
+const CONTENT = {
+  desk: {
+    tag: 'Workspace',
+    title: 'About Me',
+    body: `
+      <p>Hi — I'm <strong>[Your Name]</strong>, a [your role / e.g. developer & designer]
+      based in [city]. This room is my portfolio. Walk around and interact with
+      things to learn more.</p>
+      <p>I like building interfaces that feel like places, not pages. When I'm not
+      coding I'm [hobby], [hobby], or [hobby].</p>
+      <div class="imgrow"><div>PHOTO</div><div>PHOTO</div><div>PHOTO</div></div>
+    `
+  },
+  computer: {
+    tag: 'Projects',
+    title: 'Selected Work',
+    body: `
+      <p>A few things I've built recently:</p>
+      <ul>
+        <li><strong>Project One</strong> — short description of what it does and your role.</li>
+        <li><strong>Project Two</strong> — short description, tech used, outcome.</li>
+        <li><strong>Project Three</strong> — short description and a link.</li>
+      </ul>
+      <p>Replace these with real projects and add links in the code.</p>
+    `
+  },
+  bookshelf: {
+    tag: 'Background',
+    title: 'Skills & Experience',
+    body: `
+      <p>Tools and technologies I work with:</p>
+      <ul>
+        <li><strong>Languages:</strong> JavaScript, Python, ...</li>
+        <li><strong>Frameworks:</strong> React, Three.js, ...</li>
+        <li><strong>Design:</strong> Figma, prototyping, ...</li>
+      </ul>
+      <p><strong>Experience:</strong> [Company] — [role], [years]. [Company] — [role], [years].</p>
+    `
+  },
+  poster: {
+    tag: 'Education & Awards',
+    title: 'Credentials',
+    body: `
+      <p><strong>[University]</strong> — [Degree], [Year].</p>
+      <p>Awards & recognition:</p>
+      <ul>
+        <li>[Award or hackathon win], [Year]</li>
+        <li>[Certification], [Year]</li>
+      </ul>
+    `
+  },
+  bed: {
+    tag: 'Personal',
+    title: 'Beyond Work',
+    body: `
+      <p>Things that make me, me: [interest], [interest], [interest].</p>
+      <p>Currently reading [book], listening to [music], and trying to learn [thing].</p>
+      <div class="imgrow"><div>HOBBY</div><div>HOBBY</div><div>HOBBY</div></div>
+    `
+  },
+  phone: {
+    tag: 'Contact',
+    title: 'Get In Touch',
+    body: `
+      <p>I'd love to hear from you.</p>
+      <ul>
+        <li><strong>Email:</strong> you@example.com</li>
+        <li><strong>GitHub:</strong> github.com/you</li>
+        <li><strong>LinkedIn:</strong> linkedin.com/in/you</li>
+      </ul>
+      <p>Replace these with your real links.</p>
+    `
+  }
+};
+
+/* ============================================================
+   SCENE SETUP
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x171a1f);
+scene.fog = new THREE.Fog(0x171a1f, 8, 22);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+/* ---- Lighting ---- */
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+const ceilingLight = new THREE.PointLight(0xfff0d8, 0.9, 20, 2);
+ceilingLight.position.set(0, 3.5, 0);
+ceilingLight.castShadow = true;
+ceilingLight.shadow.mapSize.set(1024, 1024);
+scene.add(ceilingLight);
+
+const windowLight = new THREE.DirectionalLight(0xbcd4ff, 0.7);
+windowLight.position.set(-6, 4, 3);
+windowLight.castShadow = true;
+windowLight.shadow.mapSize.set(1024, 1024);
+scene.add(windowLight);
+
+/* ============================================================
+   ROOM GEOMETRY
+   ============================================================ */
+const ROOM = { w: 9, d: 9, h: 4 };
+const mat = (c, r = 0.9) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+
+// Floor
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(0x8a6f53));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Ceiling
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(0xe8e4da));
+ceiling.rotation.x = Math.PI / 2;
+ceiling.position.y = ROOM.h;
+scene.add(ceiling);
+
+// Walls
+function wall(w, h, x, y, z, ry, color) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat(color));
+  m.position.set(x, y, z);
+  m.rotation.y = ry;
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+const wallC = 0xcfc9bd, wallC2 = 0xc3bdb0;
+wall(ROOM.w, ROOM.h, 0, ROOM.h / 2, -ROOM.d / 2, 0, wallC);          // back
+wall(ROOM.w, ROOM.h, 0, ROOM.h / 2, ROOM.d / 2, Math.PI, wallC);     // front
+wall(ROOM.d, ROOM.h, -ROOM.w / 2, ROOM.h / 2, 0, Math.PI / 2, wallC2); // left
+wall(ROOM.d, ROOM.h, ROOM.w / 2, ROOM.h / 2, 0, -Math.PI / 2, wallC2); // right
+
+// Window on left wall
+const winFrame = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.2, 2.6), mat(0xf4f1ea));
+winFrame.position.set(-ROOM.w / 2 + 0.06, 2.1, 0.5);
+scene.add(winFrame);
+const winGlass = new THREE.Mesh(
+  new THREE.PlaneGeometry(2.3, 1.9),
+  new THREE.MeshStandardMaterial({ color: 0xa9c8e8, roughness: 0.2, emissive: 0x4a6a8a, emissiveIntensity: 0.5 })
+);
+winGlass.position.set(-ROOM.w / 2 + 0.14, 2.1, 0.5);
+winGlass.rotation.y = Math.PI / 2;
+scene.add(winGlass);
+
+// Rug
+const rug = new THREE.Mesh(new THREE.CircleGeometry(2, 32), mat(0xbf5b3c));
+rug.rotation.x = -Math.PI / 2;
+rug.position.y = 0.01;
+scene.add(rug);
+
+/* ============================================================
+   INTERACTIVE FURNITURE
+   Each piece registers a mesh into `interactables`.
+   ============================================================ */
+const interactables = [];
+const colliders = []; // {min:{x,z}, max:{x,z}} for movement blocking
+
+function addCollider(mesh, pad = 0.25) {
+  mesh.updateWorldMatrix(true, false);
+  const box = new THREE.Box3().setFromObject(mesh);
+  colliders.push({
+    minX: box.min.x - pad, maxX: box.max.x + pad,
+    minZ: box.min.z - pad, maxZ: box.max.z + pad
+  });
+}
+
+function registerInteractive(mesh, key) {
+  mesh.userData.interactKey = key;
+  mesh.userData.baseEmissive = mesh.material.emissive
+    ? mesh.material.emissive.getHex() : 0x000000;
+  interactables.push(mesh);
+}
+
+// ---------- DESK (About Me) ----------
+const deskGroup = new THREE.Group();
+const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 1), mat(0x9c7a4d));
+deskTop.position.y = 1.1;
+deskTop.castShadow = true;
+deskGroup.add(deskTop);
+for (const dx of [-0.95, 0.95]) for (const dz of [-0.4, 0.4]) {
+  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, 0.12), mat(0x6f5638));
+  leg.position.set(dx, 0.55, dz);
+  leg.castShadow = true;
+  deskGroup.add(leg);
+}
+deskGroup.position.set(0, 0, -ROOM.d / 2 + 0.9);
+scene.add(deskGroup);
+registerInteractive(deskTop, 'desk');
+addCollider(deskGroup, 0.15);
+
+// ---------- COMPUTER (Projects) ----------
+const compGroup = new THREE.Group();
+const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.6, 0.07),
+  new THREE.MeshStandardMaterial({ color: 0x2b2b30, emissive: 0x3a78c2, emissiveIntensity: 0.55, roughness: 0.4 }));
+monitor.position.y = 1.62;
+monitor.castShadow = true;
+compGroup.add(monitor);
+const stand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.28, 0.1), mat(0x222226));
+stand.position.y = 1.27;
+compGroup.add(stand);
+const keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.22), mat(0x35353b));
+keyboard.position.set(0, 1.18, 0.32);
+compGroup.add(keyboard);
+compGroup.position.set(0, 0, -ROOM.d / 2 + 0.9);
+scene.add(compGroup);
+registerInteractive(monitor, 'computer');
+
+// ---------- CHAIR (decor) ----------
+const chairGroup = new THREE.Group();
+const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6), mat(0x444450));
+seat.position.y = 0.55; seat.castShadow = true; chairGroup.add(seat);
+const back = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.1), mat(0x444450));
+back.position.set(0, 0.9, -0.25); back.castShadow = true; chairGroup.add(back);
+for (const dx of [-0.22, 0.22]) for (const dz of [-0.22, 0.22]) {
+  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.08), mat(0x2c2c33));
+  leg.position.set(dx, 0.27, dz); chairGroup.add(leg);
+}
+chairGroup.position.set(0, 0, -ROOM.d / 2 + 2.1);
+scene.add(chairGroup);
+addCollider(chairGroup, 0.1);
+
+// ---------- BOOKSHELF (Skills) ----------
+const shelfGroup = new THREE.Group();
+const shelfBack = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.6, 0.12), mat(0x7a5c3c));
+shelfBack.position.y = 1.3; shelfBack.castShadow = true;
+shelfGroup.add(shelfBack);
+for (let i = 0; i < 4; i++) {
+  const board = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.5), mat(0x8d6a44));
+  board.position.set(0, 0.4 + i * 0.7, 0.2);
+  shelfGroup.add(board);
+  // books
+  const bookColors = [0xc0392b, 0x27607a, 0xd9a441, 0x4a7c59, 0x8e5572];
+  let bx = -0.78;
+  while (bx < 0.78) {
+    const bw = 0.1 + Math.random() * 0.09;
+    const bh = 0.42 + Math.random() * 0.16;
+    const book = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.34),
+      mat(bookColors[Math.floor(Math.random() * bookColors.length)]));
+    book.position.set(bx + bw / 2, 0.4 + i * 0.7 + bh / 2 + 0.05, 0.2);
+    book.castShadow = true;
+    shelfGroup.add(book);
+    bx += bw + 0.015;
+  }
+}
+shelfGroup.position.set(ROOM.w / 2 - 0.3, 0, -2);
+shelfGroup.rotation.y = -Math.PI / 2;
+scene.add(shelfGroup);
+registerInteractive(shelfBack, 'bookshelf');
+addCollider(shelfGroup, 0.15);
+
+// ---------- POSTER (Education) ----------
+const poster = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.9),
+  new THREE.MeshStandardMaterial({ color: 0xe9b04a, roughness: 0.7, emissive: 0x000000 }));
+poster.position.set(0, 2.3, -ROOM.d / 2 + 0.04);
+scene.add(poster);
+const posterFrame = new THREE.Mesh(new THREE.BoxGeometry(1.55, 2.05, 0.06), mat(0x2c2c2c));
+posterFrame.position.set(0, 2.3, -ROOM.d / 2 + 0.02);
+scene.add(posterFrame);
+// place poster offset from desk so it's reachable
+poster.position.x = -2.6; posterFrame.position.x = -2.6;
+registerInteractive(poster, 'poster');
+
+// ---------- BED (Personal) ----------
+const bedGroup = new THREE.Group();
+const mattress = new THREE.Mesh(new THREE.BoxGeometry(2, 0.4, 3.2), mat(0xdcd6c8));
+mattress.position.y = 0.55; mattress.castShadow = true; bedGroup.add(mattress);
+const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.45, 3.4), mat(0x6f5638));
+bedFrame.position.y = 0.25; bedFrame.castShadow = true; bedGroup.add(bedFrame);
+const headboard = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1, 0.2), mat(0x5c462e));
+headboard.position.set(0, 0.7, -1.7); headboard.castShadow = true; bedGroup.add(headboard);
+const pillow = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 0.7), mat(0xf4f1ea));
+pillow.position.set(0, 0.85, -1.1); bedGroup.add(pillow);
+const blanket = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.18, 2), mat(0xbf5b3c));
+blanket.position.set(0, 0.84, 0.4); bedGroup.add(blanket);
+bedGroup.position.set(-ROOM.w / 2 + 1.4, 0, ROOM.d / 2 - 2.2);
+scene.add(bedGroup);
+registerInteractive(mattress, 'bed');
+addCollider(bedGroup, 0.1);
+
+// ---------- NIGHTSTAND + PHONE (Contact) ----------
+const nightstand = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), mat(0x8d6a44));
+nightstand.position.set(-ROOM.w / 2 + 1.4, 0.35, ROOM.d / 2 - 4);
+nightstand.castShadow = true;
+scene.add(nightstand);
+addCollider(nightstand, 0.1);
+const phone = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.42),
+  new THREE.MeshStandardMaterial({ color: 0x1c1c20, emissive: 0x2fae6a, emissiveIntensity: 0.6, roughness: 0.3 }));
+phone.position.set(-ROOM.w / 2 + 1.4, 0.72, ROOM.d / 2 - 4);
+scene.add(phone);
+registerInteractive(phone, 'phone');
+
+// ---------- A couple of non-interactive props for atmosphere ----------
+const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.5, 12), mat(0x33333a));
+lampBase.position.set(-ROOM.w / 2 + 1.4, 0.95, ROOM.d / 2 - 4);
+scene.add(lampBase);
+const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.32, 16),
+  new THREE.MeshStandardMaterial({ color: 0xf4d9a0, emissive: 0xffd98a, emissiveIntensity: 0.7, roughness: 0.6 }));
+lampShade.position.set(-ROOM.w / 2 + 1.4, 1.35, ROOM.d / 2 - 4);
+scene.add(lampShade);
+const lampGlow = new THREE.PointLight(0xffd98a, 0.5, 6, 2);
+lampGlow.position.copy(lampShade.position);
+scene.add(lampGlow);
+
+const plantPot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.18, 0.4, 12), mat(0xb5623d));
+plantPot.position.set(ROOM.w / 2 - 0.6, 0.2, ROOM.d / 2 - 0.7);
+scene.add(plantPot);
+addCollider(plantPot, 0.1);
+const plantBush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 0), mat(0x4a7c59));
+plantBush.position.set(ROOM.w / 2 - 0.6, 0.75, ROOM.d / 2 - 0.7);
+plantBush.castShadow = true;
+scene.add(plantBush);
+
+document.getElementById('hudTotal').textContent = interactables.length;
+
+/* ============================================================
+   FIRST-PERSON CONTROLLER  (FPS-style)
+   ============================================================ */
+const player = {
+  pos: new THREE.Vector3(0, 1.6, 2.5),
+  yaw: Math.PI,            // facing -Z (toward desk)
+  pitch: 0,
+  speed: 3.2,
+  sprint: 5.4,
+  radius: 0.35,
+  bob: 0
+};
+
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyE') tryInteractOrClose();
+  if (e.code === 'Escape') closePanel();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+/* ---- Pointer lock for mouse-look ---- */
+const overlay = document.getElementById('overlay');
+const startBtn = document.getElementById('startBtn');
+const crosshair = document.getElementById('crosshair');
+const canvas = renderer.domElement;
+
+startBtn.addEventListener('click', () => canvas.requestPointerLock());
+
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === canvas;
+  overlay.classList.toggle('hidden', locked);
+  crosshair.classList.toggle('active', locked);
+  if (!locked && !panelOpen) overlay.classList.remove('hidden');
+});
+
+document.addEventListener('mousemove', e => {
+  if (document.pointerLockElement !== canvas) return;
+  const s = 0.0022;
+  player.yaw   -= e.movementX * s;
+  player.pitch -= e.movementY * s;
+  const lim = Math.PI / 2 - 0.05;
+  player.pitch = Math.max(-lim, Math.min(lim, player.pitch));
+});
+
+canvas.addEventListener('mousedown', () => {
+  if (document.pointerLockElement === canvas) tryInteractOrClose();
+});
+
+/* ---- Movement with collision ---- */
+function blocked(x, z) {
+  if (x < -ROOM.w / 2 + player.radius || x > ROOM.w / 2 - player.radius) return true;
+  if (z < -ROOM.d / 2 + player.radius || z > ROOM.d / 2 - player.radius) return true;
+  for (const c of colliders) {
+    if (x > c.minX - player.radius && x < c.maxX + player.radius &&
+        z > c.minZ - player.radius && z < c.maxZ + player.radius) return true;
+  }
+  return false;
+}
+
+function updateMovement(dt) {
+  if (panelOpen) return;
+  let fwd = 0, str = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    fwd += 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  fwd -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) str += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  str -= 1;
+
+  if (fwd === 0 && str === 0) return;
+
+  const len = Math.hypot(fwd, str);
+  fwd /= len; str /= len;
+
+  const sp = (keys['ShiftLeft'] || keys['ShiftRight']) ? player.sprint : player.speed;
+  const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+
+  // forward vector (-Z when yaw=0 adjusted); strafe is perpendicular
+  const dx = (-sin * fwd + cos * str) * sp * dt;
+  const dz = (-cos * fwd - sin * str) * sp * dt;
+
+  // axis-separated collision so you slide along walls
+  if (!blocked(player.pos.x + dx, player.pos.z)) player.pos.x += dx;
+  if (!blocked(player.pos.x, player.pos.z + dz)) player.pos.z += dz;
+
+  player.bob += sp * dt * 1.8;
+}
+
+/* ============================================================
+   INTERACTION  — raycast from camera center
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const hint = document.getElementById('hint');
+let focused = null;
+let panelOpen = false;
+const discovered = new Set();
+
+function updateFocus() {
+  if (panelOpen) { focused = null; return; }
+  raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+  const hits = raycaster.intersectObjects(interactables, false);
+  const near = hits.find(h => h.distance < 3.2);
+
+  // reset previous
+  if (focused && (!near || near.object !== focused)) {
+    focused.material.emissive.setHex(focused.userData.baseEmissive);
+  }
+
+  if (near) {
+    focused = near.object;
+    focused.material.emissive.setHex(0xffaa55);
+    const c = CONTENT[focused.userData.interactKey];
+    hint.textContent = `[ E ]  Inspect — ${c.title}`;
+    hint.classList.add('show');
+    crosshair.classList.add('hot');
+  } else {
+    focused = null;
+    hint.classList.remove('show');
+    crosshair.classList.remove('hot');
+  }
+}
+
+/* ---- Panel open / close ---- */
+const panel    = document.getElementById('panel');
+const cardTag  = document.getElementById('cardTag');
+const cardTtl  = document.getElementById('cardTitle');
+const cardBody = document.getElementById('cardBody');
+
+function openPanel(key) {
+  const c = CONTENT[key];
+  cardTag.textContent  = c.tag;
+  cardTtl.textContent  = c.title;
+  cardBody.innerHTML   = c.body;
+  panel.classList.add('open');
+  panelOpen = true;
+  hint.classList.remove('show');
+  crosshair.classList.remove('hot');
+  document.exitPointerLock();
+
+  if (!discovered.has(key)) {
+    discovered.add(key);
+    document.getElementById('hudCount').textContent = discovered.size;
+  }
+}
+
+function closePanel() {
+  if (!panelOpen) return;
+  panel.classList.remove('open');
+  panelOpen = false;
+  if (focused) focused.material.emissive.setHex(focused.userData.baseEmissive);
+  focused = null;
+  // re-lock pointer to keep playing
+  setTimeout(() => canvas.requestPointerLock(), 80);
+}
+
+function tryInteractOrClose() {
+  if (panelOpen) { closePanel(); return; }
+  if (focused) openPanel(focused.userData.interactKey);
+}
+
+document.getElementById('closeBtn').addEventListener('click', closePanel);
+panel.addEventListener('mousedown', e => { if (e.target === panel) closePanel(); });
+
+/* ============================================================
+   FIRST-PERSON ARM  — basic shape, attached to camera
+   ============================================================ */
+const armGroup = new THREE.Group();
+const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.5),
+  mat(0xe8b88f, 0.8));
+upperArm.position.set(0, 0, -0.25);
+armGroup.add(upperArm);
+const hand = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.16), mat(0xe8b88f, 0.8));
+hand.position.set(0, 0, -0.52);
+armGroup.add(hand);
+// position arm in lower-right of view
+armGroup.position.set(0.32, -0.34, -0.3);
+armGroup.rotation.set(0.15, -0.25, 0.1);
+camera.add(armGroup);
+scene.add(camera);
+
+let armPunch = 0;
+function punchArm() { armPunch = 1; }
+canvas.addEventListener('mousedown', punchArm);
+addEventListener('keydown', e => { if (e.code === 'KeyE') punchArm(); });
+
+/* ============================================================
+   RENDER LOOP
+   ============================================================ */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  updateMovement(dt);
+
+  // camera placement with subtle head-bob
+  const bobY = Math.sin(player.bob) * 0.04;
+  camera.position.set(player.pos.x, player.pos.y + bobY, player.pos.z);
+
+  // apply yaw/pitch
+  const dir = new THREE.Vector3(
+    -Math.sin(player.yaw) * Math.cos(player.pitch),
+     Math.sin(player.pitch),
+    -Math.cos(player.yaw) * Math.cos(player.pitch)
+  );
+  camera.lookAt(camera.position.clone().add(dir));
+
+  // arm bob + punch animation
+  const armBobX = Math.sin(player.bob) * 0.012;
+  const armBobY = Math.abs(Math.sin(player.bob)) * 0.02;
+  armPunch = Math.max(0, armPunch - dt * 4);
+  const punchOffset = Math.sin(armPunch * Math.PI) * 0.22;
+  armGroup.position.set(0.32 + armBobX, -0.34 - armBobY, -0.3 - punchOffset);
+
+  updateFocus();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
